@@ -2,8 +2,8 @@
 import { Product, Service, User } from './types';
 
 export const MOCK_USERS: User[] = [
-  // { id: 'u1', name: 'Alice Admin', role: 'admin', email: 'admin@autotrack.com', password: '1234' },
-  // { id: 'u2', name: 'Bob Manager', role: 'manager', email: 'manager@autotrack.com', password: '1234' },
+  { id: 'u1', name: 'Alice Admin', role: 'admin', email: 'admin@autotrack.com', password: '1234' },
+  { id: 'u2', name: 'Bob Manager', role: 'manager', email: 'manager@autotrack.com', password: '1234' },
 ];
 
 export const SERVICE_CATEGORIES = [

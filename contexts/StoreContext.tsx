@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Product, Service, Transaction, CartItem, Customer, CashFlowEntry, CashFlowType } from '../types';
+import { Product, Service, Transaction, CartItem, Customer, CashFlowEntry, CashFlowType, Employee, Attendance } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_SERVICES } from '../constants';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -31,6 +31,17 @@ interface StoreContextType {
   canDeleteTransaction: (transaction: Transaction) => boolean;
   canEditTransaction: (transaction: Transaction) => boolean;
   addCashFlow: (entry: Omit<CashFlowEntry, 'id' | 'timestamp' | 'createdBy'>) => Promise<void>;
+
+
+  // Employee & Attendance
+  employees: Employee[];
+  attendance: Attendance[];
+  addEmployee: (employee: Omit<Employee, 'id' | 'totalDueSalary'>) => Promise<void>;
+  updateEmployee: (id: string, updates: Partial<Employee>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
+  markAttendance: (data: Omit<Attendance, 'id'>) => Promise<void>;
+  paySalary: (employeeId: string, amount: number, notes?: string) => Promise<void>;
+
   loading: boolean;
 }
 
@@ -39,17 +50,19 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  
+
   // Initialize state
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashFlows, setCashFlows] = useState<CashFlowEntry[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
 
   const fetchData = async () => {
     setLoading(true);
-    
+
     // If DB is not configured, use mock data immediately
     if (!isSupabaseConfigured) {
       console.log("Loading Mock Data (Offline Mode)");
@@ -58,37 +71,39 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       setTransactions([]);
       setCustomers([]);
       setCashFlows([]);
+      setEmployees([]);
+      setAttendance([]);
       setLoading(false);
       return;
     }
 
     try {
       console.log("Connecting to Supabase...");
-      
+
       // 1. Products
       const { data: prodData, error: prodError } = await supabase.from('products').select('*');
       if (prodError) throw prodError;
 
       if (prodData && prodData.length > 0) {
         const mappedProds = prodData.map((p: any) => ({
-            ...p,
-            buyingPrice: Number(p.buying_price),
-            sellingPrice: Number(p.selling_price),
-            stock: Number(p.stock)
+          ...p,
+          buyingPrice: Number(p.buying_price),
+          sellingPrice: Number(p.selling_price),
+          stock: Number(p.stock)
         }));
         setProducts(mappedProds);
       } else {
         console.log("Seeding Products...");
         // SEED PRODUCTS if table exists but is empty
         const seedProds = INITIAL_PRODUCTS.map(p => ({
-            id: p.id,
-            name: p.name,
-            sku: p.sku,
-            type: p.type,
-            category: p.category,
-            buying_price: p.buyingPrice,
-            selling_price: p.sellingPrice,
-            stock: p.stock
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          type: p.type,
+          category: p.category,
+          buying_price: p.buyingPrice,
+          selling_price: p.sellingPrice,
+          stock: p.stock
         }));
         const { error: seedErr } = await supabase.from('products').insert(seedProds);
         if (seedErr) console.error("Product Seed Error:", seedErr);
@@ -100,7 +115,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       if (servError) throw servError;
 
       if (servData && servData.length > 0) {
-         setServices(servData as Service[]);
+        setServices(servData as Service[]);
       } else {
         console.log("Seeding Services...");
         // SEED SERVICES
@@ -117,24 +132,24 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       // 4. Transactions
       const { data: txData } = await supabase.from('transactions').select('*').order('timestamp', { ascending: false });
       if (txData) {
-          const mappedTx = txData.map((t: any) => ({
-              id: t.id,
-              timestamp: Number(t.timestamp),
-              customerName: t.customer_name,
-              customerPhone: t.customer_phone,
-              vehicleModel: t.vehicle_model,
-              mechanicName: t.mechanic_name,
-              productTotal: Number(t.product_total),
-              serviceTotal: Number(t.service_total),
-              productDiscount: Number(t.product_discount),
-              serviceDiscount: Number(t.service_discount),
-              totalAmount: Number(t.total_amount),
-              totalProfit: Number(t.total_profit),
-              createdBy: t.created_by,
-              createdByName: t.created_by_name,
-              items: t.items // JSONB column maps directly to array
-          }));
-          setTransactions(mappedTx);
+        const mappedTx = txData.map((t: any) => ({
+          id: t.id,
+          timestamp: Number(t.timestamp),
+          customerName: t.customer_name,
+          customerPhone: t.customer_phone,
+          vehicleModel: t.vehicle_model,
+          mechanicName: t.mechanic_name,
+          productTotal: Number(t.product_total),
+          serviceTotal: Number(t.service_total),
+          productDiscount: Number(t.product_discount),
+          serviceDiscount: Number(t.service_discount),
+          totalAmount: Number(t.total_amount),
+          totalProfit: Number(t.total_profit),
+          createdBy: t.created_by,
+          createdByName: t.created_by_name,
+          items: t.items // JSONB column maps directly to array
+        }));
+        setTransactions(mappedTx);
       }
 
       // 5. Cash Flow (Expenses & Withdrawals)
@@ -143,7 +158,28 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         setCashFlows(cfData.map((c: any) => ({
           ...c,
           timestamp: Number(c.timestamp),
-          amount: Number(c.amount)
+          amount: Number(c.amount),
+          createdByName: c.created_by_name
+        })));
+      }
+
+      // 6. Employees
+      const { data: empData } = await supabase.from('employees').select('*');
+      if (empData) {
+        setEmployees(empData.map((e: any) => ({
+          ...e,
+          salaryPerMonth: Number(e.salary_per_month),
+          totalDueSalary: Number(e.total_due_salary)
+        })));
+      }
+
+      // 7. Attendance
+      const { data: attData } = await supabase.from('attendance').select('*');
+      if (attData) {
+        setAttendance(attData.map((a: any) => ({
+          ...a,
+          date: Number(a.date),
+          wage: Number(a.wage)
         })));
       }
 
@@ -171,14 +207,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     if (isSupabaseConfigured) {
       try {
         const dbPayload = {
-            id: newProduct.id,
-            name: newProduct.name,
-            sku: newProduct.sku,
-            type: 'product',
-            category: newProduct.category,
-            buying_price: newProduct.buyingPrice,
-            selling_price: newProduct.sellingPrice,
-            stock: newProduct.stock
+          id: newProduct.id,
+          name: newProduct.name,
+          sku: newProduct.sku,
+          type: 'product',
+          category: newProduct.category,
+          buying_price: newProduct.buyingPrice,
+          selling_price: newProduct.sellingPrice,
+          stock: newProduct.stock
         };
         const { error } = await supabase.from('products').insert(dbPayload);
         if (error) {
@@ -190,22 +226,22 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
-      setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-      
-      if (isSupabaseConfigured) {
-        try {
-          const dbUpdates: any = {};
-          if (updates.name) dbUpdates.name = updates.name;
-          if (updates.stock !== undefined) dbUpdates.stock = updates.stock;
-          if (updates.buyingPrice) dbUpdates.buying_price = updates.buyingPrice;
-          if (updates.sellingPrice) dbUpdates.selling_price = updates.sellingPrice;
-          if (updates.category) dbUpdates.category = updates.category;
-          if (updates.sku) dbUpdates.sku = updates.sku;
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
 
-          const { error } = await supabase.from('products').update(dbUpdates).eq('id', id);
-          if (error) console.error("DB Update Failed", error);
-        } catch (e) { console.error("DB Update Exception", e); }
-      }
+    if (isSupabaseConfigured) {
+      try {
+        const dbUpdates: any = {};
+        if (updates.name) dbUpdates.name = updates.name;
+        if (updates.stock !== undefined) dbUpdates.stock = updates.stock;
+        if (updates.buyingPrice) dbUpdates.buying_price = updates.buyingPrice;
+        if (updates.sellingPrice) dbUpdates.selling_price = updates.sellingPrice;
+        if (updates.category) dbUpdates.category = updates.category;
+        if (updates.sku) dbUpdates.sku = updates.sku;
+
+        const { error } = await supabase.from('products').update(dbUpdates).eq('id', id);
+        if (error) console.error("DB Update Failed", error);
+      } catch (e) { console.error("DB Update Exception", e); }
+    }
   };
 
   const addService = async (serviceData: Omit<Service, 'id'>) => {
@@ -215,8 +251,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       try {
         const { error } = await supabase.from('services').insert(newService);
         if (error) {
-           console.error("DB Insert Failed", error);
-           alert("Failed to save service to database.");
+          console.error("DB Insert Failed", error);
+          alert("Failed to save service to database.");
         }
       } catch (e) { console.error("DB Insert Exception", e); }
     }
@@ -242,18 +278,18 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     // 1. Handle Customer - Local Optimistic
     const existingCustomer = customers.find(c => c.name.toLowerCase() === customerName.toLowerCase());
     if (!existingCustomer) {
-       const newCust = { id: `c${Date.now()}`, name: customerName, phone: customerPhone };
-       setCustomers(prev => [...prev, newCust]);
-       if (isSupabaseConfigured) {
-         supabase.from('customers').insert(newCust).then(({error}) => {
-           if(error) console.error("Customer creation failed", error);
-         });
-       }
+      const newCust = { id: `c${Date.now()}`, name: customerName, phone: customerPhone };
+      setCustomers(prev => [...prev, newCust]);
+      if (isSupabaseConfigured) {
+        supabase.from('customers').insert(newCust).then(({ error }) => {
+          if (error) console.error("Customer creation failed", error);
+        });
+      }
     } else if (customerPhone && existingCustomer.phone !== customerPhone) {
-       setCustomers(prev => prev.map(c => c.id === existingCustomer.id ? {...c, phone: customerPhone} : c));
-       if (isSupabaseConfigured) {
-         supabase.from('customers').update({ phone: customerPhone }).eq('id', existingCustomer.id).then();
-       }
+      setCustomers(prev => prev.map(c => c.id === existingCustomer.id ? { ...c, phone: customerPhone } : c));
+      if (isSupabaseConfigured) {
+        supabase.from('customers').update({ phone: customerPhone }).eq('id', existingCustomer.id).then();
+      }
     }
 
     let productTotal = 0;
@@ -266,10 +302,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         productTotal += item.subtotal;
         const product = products.find(p => p.id === item.itemId);
         if (product) {
-            totalCost += (product.buyingPrice * item.quantity);
-            // Update local and DB stock
-            const newStock = product.stock - item.quantity;
-            updateProduct(product.id, { stock: newStock });
+          totalCost += (product.buyingPrice * item.quantity);
+          // Update local and DB stock
+          const newStock = product.stock - item.quantity;
+          updateProduct(product.id, { stock: newStock });
         }
       } else {
         serviceTotal += item.subtotal;
@@ -303,21 +339,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
     if (isSupabaseConfigured) {
       const dbTx = {
-          id: txId,
-          timestamp,
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          vehicle_model: vehicleModel,
-          mechanic_name: mechanicName,
-          product_total: productTotal,
-          service_total: serviceTotal,
-          product_discount: productDiscount,
-          service_discount: serviceDiscount,
-          total_amount: finalTotal,
-          total_profit: totalProfit,
-          created_by: user.id,
-          created_by_name: user.name,
-          items: processedItems
+        id: txId,
+        timestamp,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        vehicle_model: vehicleModel,
+        mechanic_name: mechanicName,
+        product_total: productTotal,
+        service_total: serviceTotal,
+        product_discount: productDiscount,
+        service_discount: serviceDiscount,
+        total_amount: finalTotal,
+        total_profit: totalProfit,
+        created_by: user.id,
+        created_by_name: user.name,
+        items: processedItems
       };
 
       try {
@@ -333,15 +369,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // 12 Minutes Limit
-  const TIME_LIMIT_MS = 12 * 60 * 1000; 
+  const TIME_LIMIT_MS = 12 * 60 * 1000;
 
   const canDeleteTransaction = (transaction: Transaction): boolean => {
     if (!user) return false;
     if (user.role === 'admin') return true;
-    const isWithinTimeLimit = (Date.now() - transaction.timestamp) < TIME_LIMIT_MS; 
+    const isWithinTimeLimit = (Date.now() - transaction.timestamp) < TIME_LIMIT_MS;
     return isWithinTimeLimit;
   };
-  
+
   const canEditTransaction = (transaction: Transaction): boolean => {
     return canDeleteTransaction(transaction);
   };
@@ -352,16 +388,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
     // Restore stock
     tx.items.forEach(item => {
-        if (item.type === 'product') {
-             const product = products.find(p => p.id === item.itemId);
-             if (product) {
-                 updateProduct(product.id, { stock: product.stock + item.quantity });
-             }
+      if (item.type === 'product') {
+        const product = products.find(p => p.id === item.itemId);
+        if (product) {
+          updateProduct(product.id, { stock: product.stock + item.quantity });
         }
+      }
     });
 
     setTransactions(prev => prev.filter(t => t.id !== transactionId));
-    
+
     if (isSupabaseConfigured) {
       try {
         const { error } = await supabase.from('transactions').delete().eq('id', transactionId);
@@ -392,13 +428,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addCashFlow = async (entry: Omit<CashFlowEntry, 'id' | 'timestamp' | 'createdBy'>) => {
+  const addCashFlow = async (entry: Omit<CashFlowEntry, 'id' | 'timestamp' | 'createdBy' | 'createdByName'>) => {
     if (!user) return;
     const newEntry: CashFlowEntry = {
       ...entry,
       id: `cf${Date.now()}`,
       timestamp: Date.now(),
-      createdBy: user.id
+      createdBy: user.id,
+      createdByName: user.name
     };
 
     setCashFlows(prev => [newEntry, ...prev]);
@@ -412,15 +449,118 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           amount: newEntry.amount,
           description: newEntry.description,
           timestamp: newEntry.timestamp,
-          created_by: newEntry.createdBy
+          created_by: newEntry.createdBy,
+          created_by_name: newEntry.createdByName
         });
 
         if (error) {
-            console.error("DB CashFlow Insert Failed", error);
-            alert(`Error saving to database: ${error.message || 'Unknown error'}`);
+          console.error("DB CashFlow Insert Failed", error);
+          alert(`Error saving to database: ${error.message || 'Unknown error'}`);
         }
       } catch (e) { console.error("DB CashFlow Exception", e); }
     }
+  }
+
+
+  // --- Employee Management ---
+
+  const addEmployee = async (employeeData: Omit<Employee, 'id' | 'totalDueSalary'>) => {
+    const newEmployee: Employee = {
+      ...employeeData,
+      id: `emp${Date.now()}`,
+      totalDueSalary: 0
+    };
+    setEmployees(prev => [...prev, newEmployee]);
+
+    if (isSupabaseConfigured) {
+      try {
+        const { error } = await supabase.from('employees').insert({
+          id: newEmployee.id,
+          name: newEmployee.name,
+          phone: newEmployee.phone,
+          position: newEmployee.position,
+          salary_per_month: newEmployee.salaryPerMonth,
+          total_due_salary: 0
+        });
+        if (error) console.error("DB Insert Employee Failed", error);
+      } catch (e) { console.error("DB Insert Employee Exception", e); }
+    }
+  };
+
+  const updateEmployee = async (id: string, updates: Partial<Employee>) => {
+    setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+
+    if (isSupabaseConfigured) {
+      try {
+        const dbUpdates: any = {};
+        if (updates.name) dbUpdates.name = updates.name;
+        if (updates.phone) dbUpdates.phone = updates.phone;
+        if (updates.position) dbUpdates.position = updates.position;
+        if (updates.salaryPerMonth !== undefined) dbUpdates.salary_per_month = updates.salaryPerMonth;
+        if (updates.totalDueSalary !== undefined) dbUpdates.total_due_salary = updates.totalDueSalary;
+
+        const { error } = await supabase.from('employees').update(dbUpdates).eq('id', id);
+        if (error) console.error("DB Update Employee Failed", error);
+      } catch (e) { console.error("DB Update Employee Exception", e); }
+    }
+  };
+
+  const deleteEmployee = async (id: string) => {
+    setEmployees(prev => prev.filter(e => e.id !== id));
+    if (isSupabaseConfigured) {
+      try {
+        const { error } = await supabase.from('employees').delete().eq('id', id);
+        if (error) console.error("DB Delete Employee Failed", error);
+      } catch (e) { console.error("DB Delete Employee Exception", e); }
+    }
+  };
+
+  const markAttendance = async (data: Omit<Attendance, 'id'>) => {
+    const newAttendance: Attendance = {
+      ...data,
+      id: `att${Date.now()}`
+    };
+
+    // 1. Save Attendance
+    setAttendance(prev => [...prev, newAttendance]);
+
+    // 2. Update Employee Due Salary
+    const employee = employees.find(e => e.id === data.employeeId);
+    if (employee) {
+      const newDueSalary = employee.totalDueSalary + data.wage;
+      updateEmployee(employee.id, { totalDueSalary: newDueSalary });
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        // Save Attendance
+        await supabase.from('attendance').insert({
+          id: newAttendance.id,
+          employee_id: newAttendance.employeeId,
+          date: newAttendance.date,
+          status: newAttendance.status,
+          type: newAttendance.type,
+          wage: newAttendance.wage
+        });
+      } catch (e) { console.error("DB Attendance Exception", e); }
+    }
+  };
+
+  const paySalary = async (employeeId: string, amount: number, notes?: string) => {
+    const employee = employees.find(e => e.id === employeeId);
+    if (!employee) return;
+
+    // 1. Create Expense Entry
+    await addCashFlow({
+      type: 'expense',
+      category: 'Salary',
+      amount: amount,
+      description: `Salary Payment to ${employee.name}. ${notes || ''}`
+    });
+
+    // 2. Deduct from Employee Due Salary
+    const newDueSalary = employee.totalDueSalary - amount;
+    await updateEmployee(employeeId, { totalDueSalary: newDueSalary });
   };
 
   return (
@@ -440,6 +580,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       canDeleteTransaction,
       canEditTransaction,
       addCashFlow,
+      employees,
+      attendance,
+      addEmployee,
+      updateEmployee,
+      deleteEmployee,
+      markAttendance,
+      paySalary,
       loading
     }}>
       {children}

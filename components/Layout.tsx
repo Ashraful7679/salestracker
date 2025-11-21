@@ -13,7 +13,8 @@ import {
   Settings,
   Wallet,
   BarChart3,
-  UserCircle
+  UserCircle,
+  Users
 } from 'lucide-react';
 
 const Layout = () => {
@@ -33,6 +34,7 @@ const Layout = () => {
     { path: '/inventory', label: 'Inventory & Services', icon: Package },
     { path: '/transactions', label: 'Transactions', icon: History },
     { path: '/expenses', label: 'Expenses & Withdraw', icon: Wallet },
+    { path: '/employees', label: 'Employees', icon: Users },
   ];
 
   if (user?.role === 'admin') {

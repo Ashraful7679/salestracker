@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useStore } from '../contexts/StoreContext';
 import { generateBusinessInsights } from '../services/geminiService';
+import ReportsModal from '../components/ReportsModal';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import {
   TrendingUp,
@@ -36,7 +37,8 @@ type TimeRange = 'day' | 'week' | 'month' | 'year' | 'all';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { transactions, products, cashFlows } = useStore();
+  const { transactions: Sales, products, cashFlows } = useStore();
+  const [isReportsOpen, setIsReportsOpen] = useState(false);
   const [insights, setInsights] = useState<string>('');
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('month');
@@ -74,13 +76,13 @@ export default function Dashboard() {
   };
 
   // Filter Data based on Time Range
-  const filteredTransactions = transactions.filter(t => isInRange(t.timestamp));
+  const filteredTansections = Sales.filter(t => isInRange(t.timestamp));
   const filteredCashFlows = cashFlows.filter(c => isInRange(c.timestamp));
 
   // Determine which dataset to analyze for Sales (Admin vs Manager)
   const dataToAnalyze = isAdmin
-    ? filteredTransactions
-    : filteredTransactions.filter(t => t.createdBy === user?.id);
+    ? filteredTansections
+    : filteredTansections.filter(t => t.createdBy === user?.id);
 
   const timeLabel = {
     day: "Today",
@@ -127,7 +129,7 @@ export default function Dashboard() {
     d.setHours(0, 0, 0, 0);
     const dayStr = d.toLocaleDateString('en-US', { weekday: 'short' });
 
-    const dayTx = transactions.filter(t => {
+    const dayTx = Sales.filter(t => {
       const txDate = new Date(t.timestamp);
       txDate.setHours(0, 0, 0, 0);
       return txDate.getTime() === d.getTime();
@@ -135,7 +137,7 @@ export default function Dashboard() {
 
     return {
       name: dayStr,
-      sales: dayTx.reduce((acc, t) => acc + t.totalAmount, 0),
+      Sales: dayTx.reduce((acc, t) => acc + t.totalAmount, 0),
       profit: isAdmin ? dayTx.reduce((acc, t) => acc + t.totalProfit, 0) : 0,
     };
   }).reverse();
@@ -143,12 +145,12 @@ export default function Dashboard() {
   // Today's Specific Data (New Section)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayTransactions = transactions.filter(t => t.timestamp >= today.getTime());
-  const todaySales = todayTransactions.reduce((sum, t) => sum + t.totalAmount, 0);
+  const todaySalesTransactions = Sales.filter(t => t.timestamp >= today.getTime());
+  const todaySalesAmount = todaySalesTransactions.reduce((sum, t) => sum + t.totalAmount, 0);
 
   const fetchInsights = async () => {
     setLoadingInsights(true);
-    const result = await generateBusinessInsights(transactions, products);
+    const result = await generateBusinessInsights(Sales, products);
     setInsights(result);
     setLoadingInsights(false);
   };
@@ -169,8 +171,8 @@ export default function Dashboard() {
                 key={range}
                 onClick={() => setTimeRange(range)}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${timeRange === range
-                    ? 'bg-indigo-100 text-indigo-700'
-                    : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'text-slate-600 hover:bg-slate-50'
                   }`}
               >
                 {range.charAt(0).toUpperCase() + range.slice(1)}
@@ -193,7 +195,7 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Row 1: Sales & Cash */}
+        {/* Row 1: Tansections & Cash */}
         <StatCard
           title={isAdmin ? "Total Revenue" : "My Total Sales"}
           value={`$${totalRevenue.toFixed(2)}`}
@@ -208,6 +210,16 @@ export default function Dashboard() {
             value={`$${cashOnHand.toFixed(2)}`}
             icon={Wallet}
             colorClass="bg-blue-100 text-blue-600"
+            subtext={`${timeLabel}`}
+          />
+        )}
+
+        {!isAdmin && (
+          <StatCard
+            title="My Total Expenses"
+            value={`$${filteredCashFlows.filter(c => c.type === 'expense' && c.createdBy === user?.id).reduce((sum, c) => sum + c.amount, 0).toFixed(2)}`}
+            icon={ArrowDownCircle}
+            colorClass="bg-red-100 text-red-600"
             subtext={`${timeLabel}`}
           />
         )}
@@ -273,7 +285,7 @@ export default function Dashboard() {
               <Clock className="w-5 h-5 text-indigo-600" />
               Today's Activity
             </h3>
-            <span className="text-2xl font-bold text-indigo-600">${todaySales.toFixed(2)}</span>
+            <span className="text-2xl font-bold text-indigo-600">${todaySalesAmount.toFixed(2)}</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -284,17 +296,18 @@ export default function Dashboard() {
                   <th className="pb-3 font-medium text-slate-500">Customer</th>
                   <th className="pb-3 font-medium text-slate-500">Items</th>
                   <th className="pb-3 font-medium text-slate-500 text-right">Amount</th>
+                  {isAdmin && <th className="pb-3 font-medium text-slate-500">Author</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {todayTransactions.length === 0 ? (
+                {todaySalesTransactions.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-8 text-center text-slate-400">
-                      No transactions today yet.
+                      No Sales today yet.
                     </td>
                   </tr>
                 ) : (
-                  todayTransactions.slice().reverse().map((t) => (
+                  todaySalesTransactions.slice().reverse().map((t) => (
                     <tr key={t.id} className="group hover:bg-slate-50 transition-colors">
                       <td className="py-3 text-slate-600">
                         {new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -306,6 +319,11 @@ export default function Dashboard() {
                       <td className="py-3 text-right font-bold text-slate-900">
                         ${t.totalAmount.toFixed(2)}
                       </td>
+                      {isAdmin && (
+                        <td className="py-3 text-slate-600 text-xs">
+                          {t.createdByName}
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -373,13 +391,15 @@ export default function Dashboard() {
                   cursor={{ fill: '#f1f5f9' }}
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
-                <Bar dataKey="sales" name="Revenue" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={32} />
+                <Bar dataKey="Sales" name="Revenue" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={32} />
                 {isAdmin && <Bar dataKey="profit" name="Profit" fill="#10b981" radius={[4, 4, 0, 0]} barSize={32} />}
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
+
+      <ReportsModal isOpen={isReportsOpen} onClose={() => setIsReportsOpen(false)} />
     </div>
   );
 }

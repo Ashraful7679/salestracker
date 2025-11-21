@@ -6,7 +6,7 @@ export interface User {
   name: string;
   role: UserRole;
   email: string;
-  password?: string; 
+  password?: string;
 }
 
 export interface Customer {
@@ -24,7 +24,7 @@ export interface Product {
   description?: string;
   type: 'product';
   category: string;
-  buyingPrice: number; 
+  buyingPrice: number;
   sellingPrice: number;
   stock: number;
 }
@@ -34,7 +34,7 @@ export interface Service {
   name: string;
   description?: string;
   type: 'service';
-  category: string; 
+  category: string;
 }
 
 export type CatalogItem = Product | Service;
@@ -44,7 +44,7 @@ export interface CartItem {
   name: string;
   type: ItemType;
   quantity: number;
-  unitPrice: number; 
+  unitPrice: number;
   subtotal: number;
 }
 
@@ -53,13 +53,13 @@ export interface Transaction {
   timestamp: number;
   customerName: string;
   customerPhone?: string;
-  vehicleModel?: string; 
-  mechanicName?: string; 
+  vehicleModel?: string;
+  mechanicName?: string;
   items: CartItem[];
   productTotal: number;
   serviceTotal: number;
-  productDiscount: number; 
-  serviceDiscount: number; 
+  productDiscount: number;
+  serviceDiscount: number;
   totalAmount: number;
   totalProfit: number;
   createdBy: string;
@@ -76,6 +76,7 @@ export interface CashFlowEntry {
   description: string;
   timestamp: number;
   createdBy: string;
+  createdByName: string;
 }
 
 export interface DashboardStats {
@@ -83,4 +84,22 @@ export interface DashboardStats {
   totalProfit: number;
   totalTransactions: number;
   lowStockCount: number;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  phone: string;
+  position: string;
+  salaryPerMonth: number;
+  totalDueSalary: number;
+}
+
+export interface Attendance {
+  id: string;
+  employeeId: string;
+  date: number; // timestamp for the day (midnight)
+  status: 'present' | 'absent';
+  type?: 'full' | 'half'; // Only if present
+  wage: number; // Calculated amount for this day
 }

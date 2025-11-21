@@ -11,6 +11,7 @@ import Transactions from './pages/Transactions';
 import Settings from './pages/Settings';
 import Expenses from './pages/Expenses';
 import UserManagement from './pages/UserManagement';
+import EmployeeManagement from './pages/EmployeeManagement';
 import Layout from './components/Layout';
 
 const ProtectedRoute = () => {
@@ -35,6 +36,7 @@ export default function App() {
                 <Route path="/transactions" element={<Transactions />} />
                 <Route path="/users" element={<UserManagement />} />
                 <Route path="/expenses" element={<Expenses />} />
+                <Route path="/employees" element={<EmployeeManagement />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>
