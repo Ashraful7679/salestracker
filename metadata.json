@@ -1,0 +1,9 @@
+{
+  "name": "Engine2Muffler",
+  "description": "A comprehensive sales and inventory management system for car repair businesses featuring role-based access, inventory tracking, POS with discount controls, and AI-powered business insights.",
+  "requestFramePermissions": [],
+  "icon": "/icon.png",
+  "version": "1.0.0",
+  "author": "Ashraful_Haque",
+  "authorUrl": "https://github.com/Ashraful7679"
+}
